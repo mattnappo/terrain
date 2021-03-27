@@ -77,10 +77,10 @@ impl event::EventHandler for State {
 
         for x in 0..self.x {
             for y in 0..self.y {
-                let mut color = BLACK;
-                if self.prng.gen::<u8>() > 128 {
-                    color = WHITE;
-                }
+                //let mut color = BLACK;
+                //if self.prng.gen::<u8>() > 128 {
+                //    color = WHITE;
+                //}
                 let square = graphics::Mesh::new_rectangle(
                     ctx,
                     graphics::DrawMode::fill(),
@@ -90,7 +90,13 @@ impl event::EventHandler for State {
                         self.box_size,
                         self.box_size,
                     ),
-                    color,
+                    //color,
+                    Color::new(
+                        self.prng.gen::<f32>(),
+                        self.prng.gen::<f32>(),
+                        self.prng.gen::<f32>(),
+                        1.0,
+                    ),
                 )?;
                 graphics::draw(ctx, &square, (Vec2::new(0.0, 0.0),))?;
             }
