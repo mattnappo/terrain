@@ -66,8 +66,8 @@ impl State {
         let mut prng = StdRng::seed_from_u64(use_seed);
 
         let mut state = Self {
-            x,
-            y,
+            x: x - 1,
+            y: y - 1,
             map: Vec::new(),
             vecs: Vec::new(),
             prng,
@@ -78,6 +78,7 @@ impl State {
             shift,
         };
         state.gen_vecs();
+        state.calc_perlin();
         Ok(state)
     }
 
@@ -87,6 +88,7 @@ impl State {
     }
 
     fn gen_vecs(&mut self) {
+        // Step 1
         // Assign a random vector to each point in the grid
         for x in 0..=self.x {
             let mut row: Vec<Vec2> = Vec::new();
@@ -94,6 +96,33 @@ impl State {
                 row.push(self.random_unit_vector());
             }
             self.vecs.push(row);
+        }
+    }
+
+    fn calc_perlin(&mut self) {
+        // Step 2 and 3. Calc dot products and interpolate.
+
+        for x in 0..(self.box_size * self.x as f32) as usize {
+            let mut row: Vec<f32> = Vec::new();
+            for y in 0..(self.box_size * self.y as f32) as usize {
+                let gridx: usize = x % (self.box_size as usize);
+                let gridy: usize = y % (self.box_size as usize);
+
+                let dot1 =
+                    Vec2::new((x - gridx) as f32, (y - gridy) as f32).dot(self.vecs[gridy][gridx]);
+                let dot2 = Vec2::new((x - gridx + 1) as f32, (y - gridy) as f32)
+                    .dot(self.vecs[gridy + 1][gridx]);
+                let dot3 = Vec2::new((x - gridx) as f32, (y - gridy + 1) as f32)
+                    .dot(self.vecs[gridy][gridx + 1]);
+                let dot4 = Vec2::new((x - gridx + 1) as f32, (y - gridy + 1) as f32)
+                    .dot(self.vecs[gridy + 1][gridx + 1]);
+
+                // Temp
+                let interpolated = (dot1 + dot2 + dot3 + dot4) / 4.0;
+
+                row.push(interpolated);
+            }
+            self.map.push(row);
         }
     }
 
@@ -136,7 +165,7 @@ impl State {
             1.0,
             BLACK,
         )?;
-        let mut head_length = self.scale / 5.0;
+        let head_length = self.scale / 5.0;
         let vec_angle = v.y.atan2(v.x);
         println!("vec_angle: {}", vec_angle);
         let rhead = graphics::Mesh::new_line(
@@ -182,6 +211,16 @@ impl State {
                     ),
                 )?;
             }
+        }
+        Ok(())
+    }
+
+    fn draw_map(&self, ctx: &mut Context) -> GameResult {
+        for x in 0..(self.box_size * self.x as f32) as usize {
+            for y in 0..(self.box_size * self.y as f32) as usize {
+                println!("{} ", self.map[x][y]);
+            }
+            println!();
         }
         Ok(())
     }
