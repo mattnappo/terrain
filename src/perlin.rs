@@ -88,9 +88,9 @@ impl State {
 
     fn gen_vecs(&mut self) {
         // Assign a random vector to each point in the grid
-        for x in 0..self.x {
+        for x in 0..=self.x {
             let mut row: Vec<Vec2> = Vec::new();
-            for y in 0..self.y {
+            for y in 0..=self.y {
                 row.push(self.random_unit_vector());
             }
             self.vecs.push(row);
@@ -104,8 +104,8 @@ impl State {
             let line = graphics::Mesh::new_line(
                 ctx,
                 &[
-                    Vec2::new(xf * bs, 0.0),
-                    Vec2::new(xf * bs, bs * self.y as f32),
+                    Vec2::new(xf * bs + self.shift, self.shift),
+                    Vec2::new(xf * bs + self.shift, bs * self.y as f32 + self.shift),
                 ],
                 1.0,
                 RED,
@@ -118,8 +118,8 @@ impl State {
             let line = graphics::Mesh::new_line(
                 ctx,
                 &[
-                    Vec2::new(0.0, yf * bs),
-                    Vec2::new(bs * self.x as f32, yf * bs),
+                    Vec2::new(self.shift, yf * bs + self.shift),
+                    Vec2::new(self.shift + bs * self.x as f32, yf * bs + self.shift),
                 ],
                 1.0,
                 RED,
@@ -136,8 +136,9 @@ impl State {
             1.0,
             BLACK,
         )?;
-        let head_length = self.scale / 5.0;
-        let vec_angle = (v.y / v.x).atan();
+        let mut head_length = self.scale / 5.0;
+        let vec_angle = v.y.atan2(v.x);
+        println!("vec_angle: {}", vec_angle);
         let rhead = graphics::Mesh::new_line(
             ctx,
             &[
@@ -170,8 +171,8 @@ impl State {
     }
 
     fn draw_vectors(&self, ctx: &mut Context) -> GameResult {
-        for x in 0..self.x {
-            for y in 0..self.y {
+        for x in 0..=self.x {
+            for y in 0..=self.y {
                 self.draw_vector(
                     ctx,
                     self.vecs[y][x],
@@ -216,7 +217,7 @@ fn main() -> GameResult {
         5,     // Number of cols
         5,     // Number of rows
         100.0, // Box size
-        55.0,  // Vector scale
+        40.0,  // Vector scale
         50.0,  // Rendering shift
         None,  // Seed
     )?;
