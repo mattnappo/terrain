@@ -31,6 +31,7 @@ const RED: Color = Color {
 /// Helper method to interpolate between two values.
 fn interpolate(a: f32, b: f32, w: f32) -> f32 {
     // check that w \in [0, 1]
+    println!("w: {}", w);
     (a - b) * (3.0 - w * 2.0) * w * w + a
 }
 
@@ -87,6 +88,7 @@ struct State {
 
     /// Debugging stuff
     debug_vecs: Vec<Vec2>,
+    frames: u32,
 }
 
 impl State {
@@ -115,7 +117,7 @@ impl State {
             x,
             y,
             vecs: Vec::new(),
-            noise: Vec::new(),
+            noise: vec![vec![0.0; x * scale as usize]; y * scale as usize],
             prng,
             seed: use_seed,
             drawn: false,
@@ -125,6 +127,7 @@ impl State {
             shift,
             font: graphics::Font::new(ctx, "/Roboto-Medium.ttf")?,
             debug_vecs: vec![Vec2::new(0.0, 0.0); 4],
+            frames: 0,
         };
         state.gen_vecs();
         //state.calc_perlin();
@@ -198,7 +201,7 @@ impl State {
         }
     }
 
-    fn calc_perlin_debug(&mut self, x: f32, y: f32) {
+    fn calc_perlin_debug(&mut self, x: f32, y: f32) -> f32 {
         let pos = Vec2::new(x as f32 - self.shift, y as f32 - self.shift);
         let gridx = (pos.x / self.scale) as usize;
         let gridy = (pos.y / self.scale) as usize;
@@ -227,7 +230,6 @@ impl State {
         self.debug_vecs[3] = bro;
 
         // Corner vectors
-        /*
         let tlv = self.vecs[gridy][gridx];
         let trv = self.vecs[gridy][gridx + 1];
         let blv = self.vecs[gridy + 1][gridx];
@@ -241,10 +243,11 @@ impl State {
         //println!("(d1, d2, d3, d4) = ({}, {}, {}, {})", d1, d2, d3, d4);
 
         // Interpolation
-        let i1 = interpolate(d1, d2);
-        let i1 = interpolate(d3, d4);
-        let i = interpolate(d1, d2);
-        */
+        let i1 = interpolate(d1, d2, tlo.x / self.scale);
+        let i2 = interpolate(d3, d4, tlo.x / self.scale);
+        let i = interpolate(i1, i2, tlo.y / self.scale);
+        self.noise[y as usize][x as usize] = i;
+        i
     }
 
     /* -- Drawing functions -- */
@@ -301,7 +304,7 @@ impl State {
             1.0,
             BLACK,
         )?;
-        let head_length = self.scale / 5.0;
+        let head_length = self.scale / 8.0;
         let vec_angle = v.y.atan2(v.x);
         let rhead = graphics::Mesh::new_line(
             ctx,
@@ -408,8 +411,9 @@ impl State {
             self.draw_text(ctx, format_vec(vec), (0.0, 25.0 * i as f32 + 400.0))?;
         }
 
-        // Draw the debug offset vectors
-        self.calc_perlin_debug(pos.x, pos.y);
+        // Draw the debug offset vectors and the perlin noise value at the cursor
+        let noise = self.calc_perlin_debug(pos.x, pos.y);
+        self.draw_text(ctx, noise.to_string(), (0.0, 550.0))?;
 
         self.draw_vector(
             ctx,
@@ -466,6 +470,9 @@ impl event::EventHandler for State {
         self.draw_grid(ctx)?;
         self.draw_vectors(ctx)?;
         //self.draw_noise(ctx)?;
+
+        self.frames += 1;
+        // println!("frame {}", self.frames);
 
         //self.drawn = true;
 
