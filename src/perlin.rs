@@ -5,7 +5,7 @@ use ggez::{
 };
 use glam::*;
 use rand::{self, rngs::StdRng, Rng, SeedableRng};
-use std::{f32::consts, time::SystemTime};
+use std::{env, f32::consts, path, time::SystemTime};
 
 const PI2: f32 = 2.0 * consts::PI;
 
@@ -67,13 +67,16 @@ struct State {
     scale: f32,
 
     /// The number of pixels in the x direction (disregarding the shift)
-    x_pixels: usize,
+    xpx: usize,
 
     /// The number of pixels in the y direction (disregard the shift)
-    y_pixels: usize,
+    ypx: usize,
 
     /// Linear shift, in pixels (for rendering only)
     shift: f32,
+
+    /// The font for drawing text
+    font: graphics::Font,
 }
 
 impl State {
@@ -84,6 +87,7 @@ impl State {
         scale: f32,
         shift: f32,
         seed: Option<u64>,
+        ctx: &mut Context,
     ) -> GameResult<Self> {
         // Build the prng
         let mut use_seed: u64 = 0;
@@ -95,7 +99,7 @@ impl State {
             }
         }
         println!("seed is: {}", use_seed);
-        let mut prng = StdRng::seed_from_u64(use_seed);
+        let prng = StdRng::seed_from_u64(use_seed);
 
         let mut state = Self {
             x,
@@ -106,9 +110,10 @@ impl State {
             seed: use_seed,
             drawn: false,
             scale,
-            x_pixels: x * scale as usize,
-            y_pixels: y * scale as usize,
+            xpx: x * scale as usize,
+            ypx: y * scale as usize,
             shift,
+            font: graphics::Font::new(ctx, "/Roboto-Medium.ttf")?,
         };
         state.gen_vecs();
         state.calc_perlin();
@@ -123,11 +128,10 @@ impl State {
 
     /// Generate the random vectors
     fn gen_vecs(&mut self) {
-        // Step 1
         // Assign a random vector to each point in the grid
-        for x in 0..self.x {
+        for _ in 0..self.x {
             let mut row: Vec<Vec2> = Vec::new();
-            for y in 0..self.y {
+            for _ in 0..self.y {
                 row.push(self.random_unit_vector());
             }
             self.vecs.push(row);
@@ -144,6 +148,15 @@ impl State {
         // Interpolate the y dots
         // Interpolate the interpolation of the x dots and the interpolation of the y dots
         // Other todo: Check that the interpolation function is all good
+
+        for x in 0..self.xpx {
+            for y in 0..self.ypx {
+                let gridx = ((x as f32 - self.shift) / self.scale) as usize;
+                let gridy = ((y as f32 - self.shift) / self.scale) as usize;
+                println!("  (x,y) = ({},{})", x, y);
+                println!("(gx,gy) = ({},{})", gridx, gridy);
+            }
+        }
     }
 
     /* -- Drawing functions -- */
@@ -259,8 +272,8 @@ impl State {
 
     /// Draw the noise
     fn draw_noise(&self, ctx: &mut Context) -> GameResult {
-        for x in 0..self.x_pixels {
-            for y in 0..self.y_pixels {
+        for x in 0..self.xpx {
+            for y in 0..self.ypx {
                 // PLEASE FIND A MORE EFFICIENT WAY TO DO THIS
                 let px = graphics::Mesh::new_rectangle(
                     ctx,
@@ -288,15 +301,39 @@ impl event::EventHandler for State {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, WHITE);
 
+        {
+            let pos = ggez::input::mouse::position(ctx);
+            let pos_text = graphics::Text::new(graphics::TextFragment {
+                text: format!("({},{})", pos.x, pos.y),
+                color: Some(BLACK),
+                font: Some(self.font),
+                scale: Some(graphics::Scale { x: 28.0, y: 28.0 }),
+            });
+            let grid_text = graphics::Text::new(graphics::TextFragment {
+                text: format!(
+                    "({},{})",
+                    ((pos.x - self.shift) / self.scale) as usize,
+                    ((pos.y - self.shift) / self.scale) as usize,
+                ),
+                color: Some(BLACK),
+                font: Some(self.font),
+                scale: Some(graphics::Scale { x: 28.0, y: 28.0 }),
+            });
+
+            graphics::draw(ctx, &pos_text, (Vec2::new(0.0, 0.0),))?;
+            graphics::draw(ctx, &grid_text, (Vec2::new(0.0, 50.0),))?;
+            graphics::present(ctx)?;
+        }
+
         if self.drawn {
             return Ok(());
         }
 
         self.draw_grid(ctx)?;
         self.draw_vectors(ctx)?;
-        self.draw_noise(ctx)?;
+        //self.draw_noise(ctx)?;
 
-        self.drawn = true;
+        //self.drawn = true;
 
         graphics::present(ctx)?;
         Ok(())
@@ -304,6 +341,14 @@ impl event::EventHandler for State {
 }
 
 fn main() -> GameResult {
+    let res_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        let mut path = path::PathBuf::from(manifest_dir);
+        path.push("res");
+        path
+    } else {
+        path::PathBuf::from("./res")
+    };
+
     let cb = ggez::ContextBuilder::new("terrain generation", "xoreo")
         .window_setup(ggez::conf::WindowSetup {
             title: "terrain generation".to_owned(),
@@ -322,8 +367,9 @@ fn main() -> GameResult {
             max_width: 0.0,
             min_height: 0.0,
             max_height: 0.0,
-            resizable: true,
-        });
+            resizable: false,
+        })
+        .add_resource_path(res_dir);
     let (mut ctx, mut event_loop) = cb.build()?;
 
     let mut state = State::new(
@@ -332,6 +378,8 @@ fn main() -> GameResult {
         100.0, // Scale
         100.0, // Rendering shift
         None,  // Seed
+        // Some(1617081672u64),
+        &mut ctx,
     )?;
 
     event::run(&mut ctx, &mut event_loop, &mut state)
