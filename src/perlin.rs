@@ -43,34 +43,48 @@ struct State {
     y: usize,
 
     /// The initial random unit gradient vectors (unit = 1.0)
+    /// Size: (y, x) (rows, cols)
     vecs: Vec<Vec<Vec2>>,
 
     /// The final, interpolated noise. Each f32 is a value in the range [0, 1],
     /// representing the color value of a pixel at the point (x, y).
-    /// There are x*scale x values, and y*scale y values.
+    /// Size: (y*scale, x*scale) (rows, cols) (in pixels)
     noise: Vec<Vec<f32>>,
 
     /// All game randomness comes from this rng
     prng: StdRng,
 
     // The rng's seed
+    #[allow(dead_code)]
     seed: u64,
 
     /* -- For rendering only -- */
     /// Whether the scene was drawn already
     drawn: bool,
 
-    /// Linear shift, in pixels (for rendering only)
-    shift: f32,
-
     /// The number of pixels between each grid, the length of the arrows
     /// when drawn (in pixels)
     scale: f32,
+
+    /// The number of pixels in the x direction (disregarding the shift)
+    x_pixels: usize,
+
+    /// The number of pixels in the y direction (disregard the shift)
+    y_pixels: usize,
+
+    /// Linear shift, in pixels (for rendering only)
+    shift: f32,
 }
 
 impl State {
     /// Create a new game state
-    fn new(x: usize, y: usize, scale: f32, shift: f32, seed: Option<u64>) -> GameResult<Self> {
+    fn new(
+        x: usize,
+        y: usize,
+        scale: f32,
+        shift: f32,
+        seed: Option<u64>,
+    ) -> GameResult<Self> {
         // Build the prng
         let mut use_seed: u64 = 0;
         if let Some(s) = seed {
@@ -84,14 +98,16 @@ impl State {
         let mut prng = StdRng::seed_from_u64(use_seed);
 
         let mut state = Self {
-            x: x,
-            y: y,
+            x,
+            y,
             vecs: Vec::new(),
             noise: Vec::new(),
             prng,
             seed: use_seed,
             drawn: false,
             scale,
+            x_pixels: x * scale as usize,
+            y_pixels: y * scale as usize,
             shift,
         };
         state.gen_vecs();
@@ -120,7 +136,14 @@ impl State {
 
     /// Calculate the dot products and interpolation
     fn calc_perlin(&mut self) {
-        // Step 2 and 3. Calc dot products and interpolate.
+        // For every single pixel:
+        // Find which grid that pixel lies in (top left origin)
+        // Calculate the displacement vectors from that pixel to each of the 4 corners
+        // Dot each displacement vector with its associated corner gradient vector
+        // Interpolate the x dots
+        // Interpolate the y dots
+        // Interpolate the interpolation of the x dots and the interpolation of the y dots
+        // Other todo: Check that the interpolation function is all good
     }
 
     /* -- Drawing functions -- */
@@ -134,7 +157,10 @@ impl State {
                 ctx,
                 &[
                     Vec2::new(xf * bs + self.shift, self.shift),
-                    Vec2::new(xf * bs + self.shift, bs * (self.y - 1) as f32 + self.shift),
+                    Vec2::new(
+                        xf * bs + self.shift,
+                        bs * (self.y - 1) as f32 + self.shift,
+                    ),
                 ],
                 1.0,
                 RED,
@@ -148,7 +174,10 @@ impl State {
                 ctx,
                 &[
                     Vec2::new(self.shift, yf * bs + self.shift),
-                    Vec2::new(self.shift + bs * (self.x - 1) as f32, yf * bs + self.shift),
+                    Vec2::new(
+                        self.shift + bs * (self.x - 1) as f32,
+                        yf * bs + self.shift,
+                    ),
                 ],
                 1.0,
                 RED,
@@ -159,7 +188,12 @@ impl State {
     }
 
     /// Draw a 2D arrow/vector
-    fn draw_vector(&self, ctx: &mut Context, v: Vec2, pos: (f32, f32)) -> GameResult {
+    fn draw_vector(
+        &self,
+        ctx: &mut Context,
+        v: Vec2,
+        pos: (f32, f32),
+    ) -> GameResult {
         let line = graphics::Mesh::new_line(
             ctx,
             &[
@@ -225,6 +259,23 @@ impl State {
 
     /// Draw the noise
     fn draw_noise(&self, ctx: &mut Context) -> GameResult {
+        for x in 0..self.x_pixels {
+            for y in 0..self.y_pixels {
+                // PLEASE FIND A MORE EFFICIENT WAY TO DO THIS
+                let px = graphics::Mesh::new_rectangle(
+                    ctx,
+                    graphics::DrawMode::fill(),
+                    graphics::Rect::new(
+                        x as f32 + self.shift,
+                        y as f32 + self.shift,
+                        1.0,
+                        1.0,
+                    ),
+                    Color::new(0.0, 0.0, self.noise[y][x], 1.0),
+                )?;
+                graphics::draw(ctx, &px, (Vec2::new(0.0, 0.0),))?;
+            }
+        }
         Ok(())
     }
 }
@@ -253,29 +304,26 @@ impl event::EventHandler for State {
 }
 
 fn main() -> GameResult {
-    let w_setup = ggez::conf::WindowSetup {
-        title: "terrain generation".to_owned(),
-        samples: ggez::conf::NumSamples::One,
-        vsync: false,
-        icon: "".to_owned(),
-        srgb: true,
-    };
-    let w_mode = ggez::conf::WindowMode {
-        width: 600.0,
-        height: 600.0,
-        maximized: false,
-        fullscreen_type: ggez::conf::FullscreenType::Windowed,
-        borderless: false,
-        min_width: 0.0,
-        max_width: 0.0,
-        min_height: 0.0,
-        max_height: 0.0,
-        resizable: true,
-    };
-
     let cb = ggez::ContextBuilder::new("terrain generation", "xoreo")
-        .window_setup(w_setup)
-        .window_mode(w_mode);
+        .window_setup(ggez::conf::WindowSetup {
+            title: "terrain generation".to_owned(),
+            samples: ggez::conf::NumSamples::One,
+            vsync: false,
+            icon: "".to_owned(),
+            srgb: true,
+        })
+        .window_mode(ggez::conf::WindowMode {
+            width: 600.0,
+            height: 600.0,
+            maximized: false,
+            fullscreen_type: ggez::conf::FullscreenType::Windowed,
+            borderless: false,
+            min_width: 0.0,
+            max_width: 0.0,
+            min_height: 0.0,
+            max_height: 0.0,
+            resizable: true,
+        });
     let (mut ctx, mut event_loop) = cb.build()?;
 
     let mut state = State::new(
@@ -285,5 +333,6 @@ fn main() -> GameResult {
         100.0, // Rendering shift
         None,  // Seed
     )?;
+
     event::run(&mut ctx, &mut event_loop, &mut state)
 }
