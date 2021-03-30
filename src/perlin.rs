@@ -28,10 +28,17 @@ const RED: Color = Color {
     a: 1.0,
 };
 
-// Helper method to interpolate between two values.
+/// Helper method to interpolate between two values.
 fn interpolate(a: f32, b: f32, w: f32) -> f32 {
     // check that w \in [0, 1]
     (a - b) * (3.0 - w * 2.0) * w * w + a
+}
+
+/// Helper method to format a vector
+fn format_vec(v: &Vec2) -> String {
+    let angle = v.y.atan2(v.x);
+    let mag = (v.x * v.x + v.y * v.y).sqrt();
+    format!("Vec {{ x:{}, y:{}, a:{}, m:{} }}", v.x, v.y, angle, mag)
 }
 
 /// The game's main state
@@ -77,6 +84,9 @@ struct State {
 
     /// The font for drawing text
     font: graphics::Font,
+
+    /// Debugging stuff
+    debug_vecs: Vec<Vec2>,
 }
 
 impl State {
@@ -114,9 +124,10 @@ impl State {
             ypx: y * scale as usize,
             shift,
             font: graphics::Font::new(ctx, "/Roboto-Medium.ttf")?,
+            debug_vecs: vec![Vec2::new(0.0, 0.0); 4],
         };
         state.gen_vecs();
-        state.calc_perlin();
+        //state.calc_perlin();
         Ok(state)
     }
 
@@ -151,12 +162,89 @@ impl State {
 
         for x in 0..self.xpx {
             for y in 0..self.ypx {
-                let gridx = ((x as f32 - self.shift) / self.scale) as usize;
-                let gridy = ((y as f32 - self.shift) / self.scale) as usize;
-                println!("  (x,y) = ({},{})", x, y);
-                println!("(gx,gy) = ({},{})", gridx, gridy);
+                let pos = Vec2::new(x as f32 - self.shift, y as f32 - self.shift);
+                let gridx = (pos.x / self.scale) as usize;
+                let gridy = (pos.y / self.scale) as usize;
+                let gridxf = gridx as f32;
+                let gridyf = gridy as f32;
+
+                // Offset vectors
+                let tlo = Vec2::new(pos.x - gridxf, pos.y - gridyf);
+                let tro = Vec2::new(pos.x - (gridxf + self.scale), pos.y - gridyf);
+                let blo = Vec2::new(pos.x - gridxf, pos.y - (gridyf + self.scale));
+                let bro = Vec2::new(
+                    pos.x - (gridxf + self.scale),
+                    pos.y - (gridyf + self.scale),
+                );
+
+                // Corner vectors
+                let tlv = self.vecs[gridy][gridx];
+                let trv = self.vecs[gridy][gridx + 1];
+                let blv = self.vecs[gridy + 1][gridx];
+                let brv = self.vecs[gridy + 1][gridx + 1];
+
+                // Dot products
+                let d1 = tlo.dot(tlv);
+                let d2 = tro.dot(trv);
+                let d3 = blo.dot(blv);
+                let d4 = bro.dot(brv);
+                println!("(d1, d2, d3, d4) = ({}, {}, {}, {})", d1, d2, d3, d4);
+
+                // Interpolation
+                //let i1 = interpolate(d1, d2);
+                //let i1 = interpolate(d3, d4);
+                //let i = interpolate(d1, d2);
             }
         }
+    }
+
+    fn calc_perlin_debug(&mut self, x: f32, y: f32) {
+        let pos = Vec2::new(x as f32 - self.shift, y as f32 - self.shift);
+        let gridx = (pos.x / self.scale) as usize;
+        let gridy = (pos.y / self.scale) as usize;
+        let gridxf = gridx as f32;
+        let gridyf = gridy as f32;
+
+        // Offset vectors
+        let tlo =
+            Vec2::new(pos.x - gridxf * self.scale, pos.y - gridyf * self.scale);
+        let tro = Vec2::new(
+            pos.x - (gridxf + 1.0) * self.scale,
+            pos.y - gridyf * self.scale,
+        );
+        let blo = Vec2::new(
+            pos.x - gridxf * self.scale,
+            pos.y - (gridyf + 1.0) * self.scale,
+        );
+        let bro = Vec2::new(
+            pos.x - (gridxf + 1.0) * self.scale,
+            pos.y - (gridyf + 1.0) * self.scale,
+        );
+
+        self.debug_vecs[0] = tlo;
+        self.debug_vecs[1] = tro;
+        self.debug_vecs[2] = blo;
+        self.debug_vecs[3] = bro;
+
+        // Corner vectors
+        /*
+        let tlv = self.vecs[gridy][gridx];
+        let trv = self.vecs[gridy][gridx + 1];
+        let blv = self.vecs[gridy + 1][gridx];
+        let brv = self.vecs[gridy + 1][gridx + 1];
+
+        // Dot products
+        let d1 = tlo.dot(tlv);
+        let d2 = tro.dot(trv);
+        let d3 = blo.dot(blv);
+        let d4 = bro.dot(brv);
+        //println!("(d1, d2, d3, d4) = ({}, {}, {}, {})", d1, d2, d3, d4);
+
+        // Interpolation
+        let i1 = interpolate(d1, d2);
+        let i1 = interpolate(d3, d4);
+        let i = interpolate(d1, d2);
+        */
     }
 
     /* -- Drawing functions -- */
@@ -209,10 +297,7 @@ impl State {
     ) -> GameResult {
         let line = graphics::Mesh::new_line(
             ctx,
-            &[
-                Vec2::new(pos.0, pos.1),
-                Vec2::new(pos.0 + v.x * self.scale, pos.1 + v.y * self.scale),
-            ],
+            &[Vec2::new(pos.0, pos.1), Vec2::new(pos.0 + v.x, pos.1 + v.y)],
             1.0,
             BLACK,
         )?;
@@ -291,6 +376,77 @@ impl State {
         }
         Ok(())
     }
+
+    /// Helper method to generate a new piece of text, ready for rendering
+    fn draw_text(
+        &self,
+        ctx: &mut Context,
+        text: String,
+        pos: (f32, f32),
+    ) -> GameResult {
+        let text = graphics::Text::new(graphics::TextFragment {
+            text,
+            color: Some(BLACK),
+            font: Some(self.font),
+            scale: Some(graphics::Scale { x: 24.0, y: 24.0 }),
+        });
+        graphics::draw(ctx, &text, (Vec2::new(pos.0, pos.1),))?;
+        Ok(())
+    }
+
+    /// Draw debug information
+    fn draw_debug(&mut self, ctx: &mut Context) -> GameResult {
+        // Draw the grid space and mouse position
+        let pos = ggez::input::mouse::position(ctx);
+        let gridx = ((pos.x - self.shift) / self.scale) as usize as f32;
+        let gridy = ((pos.y - self.shift) / self.scale) as usize as f32;
+
+        self.draw_text(ctx, format!("({},{})", pos.x, pos.y), (0.0, 0.0))?;
+        self.draw_text(ctx, format!("({},{})", gridx, gridy), (0.0, 50.0))?;
+
+        for (i, vec) in self.debug_vecs.iter().enumerate() {
+            self.draw_text(ctx, format_vec(vec), (0.0, 25.0 * i as f32 + 400.0))?;
+        }
+
+        // Draw the debug offset vectors
+        self.calc_perlin_debug(pos.x, pos.y);
+
+        self.draw_vector(
+            ctx,
+            self.debug_vecs[0],
+            (
+                gridx * self.scale + self.shift,
+                gridy * self.scale + self.shift,
+            ),
+        )?;
+        self.draw_vector(
+            ctx,
+            self.debug_vecs[1],
+            (
+                (gridx + 1.0) * self.scale + self.shift,
+                gridy * self.scale + self.shift,
+            ),
+        )?;
+        self.draw_vector(
+            ctx,
+            self.debug_vecs[2],
+            (
+                gridx * self.scale + self.shift,
+                (gridy + 1.0) * self.scale + self.shift,
+            ),
+        )?;
+        self.draw_vector(
+            ctx,
+            self.debug_vecs[3],
+            (
+                (gridx + 1.0) * self.scale + self.shift,
+                (gridy + 1.0) * self.scale + self.shift,
+            ),
+        )?;
+
+        graphics::present(ctx)?;
+        Ok(())
+    }
 }
 
 impl event::EventHandler for State {
@@ -301,29 +457,7 @@ impl event::EventHandler for State {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, WHITE);
 
-        {
-            let pos = ggez::input::mouse::position(ctx);
-            let pos_text = graphics::Text::new(graphics::TextFragment {
-                text: format!("({},{})", pos.x, pos.y),
-                color: Some(BLACK),
-                font: Some(self.font),
-                scale: Some(graphics::Scale { x: 28.0, y: 28.0 }),
-            });
-            let grid_text = graphics::Text::new(graphics::TextFragment {
-                text: format!(
-                    "({},{})",
-                    ((pos.x - self.shift) / self.scale) as usize,
-                    ((pos.y - self.shift) / self.scale) as usize,
-                ),
-                color: Some(BLACK),
-                font: Some(self.font),
-                scale: Some(graphics::Scale { x: 28.0, y: 28.0 }),
-            });
-
-            graphics::draw(ctx, &pos_text, (Vec2::new(0.0, 0.0),))?;
-            graphics::draw(ctx, &grid_text, (Vec2::new(0.0, 50.0),))?;
-            graphics::present(ctx)?;
-        }
+        self.draw_debug(ctx)?;
 
         if self.drawn {
             return Ok(());
